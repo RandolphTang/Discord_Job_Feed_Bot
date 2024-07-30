@@ -58,8 +58,6 @@ async def scrape_github_internships(url: str, max_retries: int = 5,
                         if row_tuple not in unique_rows:
                             unique_rows.add(row_tuple)
                             rows.append(row)
-                            if len(rows) == max_return:
-                                break
 
                 df = pd.DataFrame(rows, columns=headers)
 
