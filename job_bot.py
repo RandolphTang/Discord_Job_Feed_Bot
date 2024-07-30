@@ -6,10 +6,10 @@ import json
 from dotenv import load_dotenv
 from job_scraper_bot import scrape_github_internships, sort_dataframe_by_date
 
-
 load_dotenv()
 
 bot_token = os.getenv('DISCORD_BOT_TOKEN')
+
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
