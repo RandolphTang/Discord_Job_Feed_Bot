@@ -70,36 +70,58 @@ async def fetch_internships():
         return []
 
 
+# async def update_internships_for_guild(guild_id):
+#     try:
+#         new_internships = await fetch_internships()
+#         old_internships = load_internships()
+#         new_entries = [i for i in new_internships if i not in old_internships]
+#
+#         if new_entries and guild_id in channel_config:
+#             channel_id = channel_config[guild_id]
+#             channel = bot.get_channel(int(channel_id))
+#             if channel:
+#                 for internship in new_entries:
+#                     embed = discord.Embed(title=f"**__```{internship['Company']} - {internship['Role']}```__**",
+#                                           color=0x00ff00)
+#                     embed.add_field(name="🌍 Location", value=internship['Location'], inline=True)
+#
+#                     date_posted = internship['Date Posted']
+#                     if isinstance(date_posted, datetime):
+#                         date_posted = date_posted.strftime('%b %d')
+#
+#                     embed.add_field(name="📅 Date Posted", value=date_posted, inline=True)
+#                     embed.add_field(name="💼 Application Link", value=internship['Application/Link'],
+#                                     inline=False)
+#                     await channel.send(embed=embed)
+#
+#         save_internships(new_internships)
+#
+#     except Exception as e:
+#         print(f"An error occurred updating for guild {guild_id}: {str(e)}")
+
 @tasks.loop(hours=0.5)
 async def update_internships():
-    try:
-        new_internships = await fetch_internships()
+    new_internships = await fetch_internships()
+    for channel_id, config in channel_config.items():
+        channel = bot.get_channel(int(channel_id))
+        if channel:
+            last_update = datetime.fromisoformat(config["last_update"]) if config["last_update"] else None
+            new_entries = [i for i in new_internships if
+                           not last_update or datetime.fromisoformat(i['Date Posted']) > last_update]
+            for internship in new_entries:
+                embed = create_internship_embed(internship)
+                await channel.send(embed=embed)
+            if new_entries:
+                channel_config[channel_id]["last_update"] = datetime.now().isoformat()
+                save_channel_config(channel_config)
 
-        old_internships = load_internships()
 
-        new_entries = [i for i in new_internships if i not in old_internships]
-
-        if new_entries:
-            for guild_id, channel_id in channel_config.items():
-                channel = bot.get_channel(int(channel_id))
-                for internship in new_entries:
-                    embed = discord.Embed(title=f"**__```{internship['Company']} - {internship['Role']}```__**",
-                                          color=0x00ff00)
-                    embed.add_field(name="🌍 Location", value=internship['Location'], inline=True)
-
-                    date_posted = internship['Date Posted']
-                    if isinstance(date_posted, datetime):
-                        date_posted = date_posted.strftime('%b %d')
-
-                    embed.add_field(name="📅 Date Posted", value=date_posted, inline=True)
-                    embed.add_field(name="💼 Application Link", value=internship['Application/Link'],
-                                    inline=False)
-                    await channel.send(embed=embed)
-
-                save_internships(new_internships)
-
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
+def create_internship_embed(internship):
+    embed = discord.Embed(title=f"**__```{internship['Company']} - {internship['Role']}```__**", color=0x00ff00)
+    embed.add_field(name="🌍 Location", value=internship['Location'], inline=True)
+    embed.add_field(name="📅 Date Posted", value=internship['Date Posted'], inline=True)
+    embed.add_field(name="💼 Application Link", value=internship['Application/Link'], inline=False)
+    return embed
 
 
 @bot.event
@@ -119,10 +141,19 @@ async def on_guild_join(guild):
 
 @bot.command()
 async def set_channel(ctx):
-    channel_config[str(ctx.guild.id)] = ctx.channel.id
+    channel_config[ctx.channel.id] = {"last_update": None}
     save_channel_config(channel_config)
     await ctx.send("Internship updates will now be sent to this channel, Meow!.")
-    await update_internships()
+    await send_initial_internships(ctx.channel)
+
+
+async def send_initial_internships(channel):
+    internships = await fetch_internships()
+    for internship in internships:
+        embed = create_internship_embed(internship)
+        await channel.send(embed=embed)
+    channel_config[channel.id]["last_update"] = datetime.now().isoformat()
+    save_channel_config(channel_config)
 
 
 bot.run(bot_token)
